@@ -6,64 +6,65 @@ from datetime import datetime
 # Configurazione Pagina
 st.set_page_config(page_title="Libro-rosso-TRIP", layout="wide")
 
-# --- CSS CUSTOM PER REPLICARE IL REGISTRO ---
+# --- CSS CUSTOM PER STILE REGISTRO ---
 st.markdown("""
     <style>
     /* Rimpiccioliamo i bottoni e gestiamo il font */
     div.stButton > button {
         width: 100% !important;
-        height: 45px !important;
+        height: 40px !important;
         padding: 0px !important;
         border: 1px solid #e0e0e0 !important;
         border-radius: 0px !important;
         background-color: white !important;
-        transition: none !important;
     }
     
-    /* Stile per la R (Riposo) */
+    /* Stile per la R (Riposo) - Grigio tenue */
     .stButton > button p {
-        color: #d3d3d3 !important; /* Grigio tenue */
+        color: #d3d3d3 !important;
         font-weight: normal !important;
         font-size: 14px !important;
     }
 
-    /* Stile per la X (Lavoro) - Quando cliccato lo stato cambia */
-    /* Nota: Usiamo una logica di colore basata sul contenuto del tasto */
+    /* Override per la X (Lavoro) - Nero e Grassetto */
+    /* Usiamo un selettore basato sul testo del bottone se possibile o logica di stato */
     
-    /* Intestazioni e celle calcoli */
     .header-box {
         background-color: #f8f9fa;
         border: 1px solid #dee2e6;
         padding: 5px;
         text-align: center;
         font-weight: bold;
-        font-size: 11px;
+        font-size: 10px;
+        height: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
     .calc-cell {
-        height: 45px;
+        height: 40px;
         display: flex;
         align-items: center;
         justify-content: center;
         border: 1px solid #dee2e6;
         font-weight: bold;
-        background-color: #ffffff;
+        font-size: 13px;
     }
-    .row-violation {
-        background-color: #ffebee; /* Sfondo rossastro per violazioni */
+    /* Input commenti */
+    .stTextInput input {
+        border-radius: 0px !important;
+        height: 40px !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- INTESTAZIONE ---
-st.title("🚢 Registro Ore di Lavoro e Riposo")
-st.caption("Conforme ai requisiti D.Lgs 271/99 e 108/2005")
+st.title("🚢 Libro-rosso-TRIP")
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.header("⚙️ Impostazioni")
-    nome = st.text_input("Nome/Cognome Marittimo", "ROSSI MARIO")
-    qualifica = st.text_input("Qualifica/Grado", "UFFICIALE")
-    
+    st.header("⚙️ Parametri")
+    nome = st.text_input("Nome/Cognome", "ROSSI MARIO")
+    qualifica = st.text_input("Qualifica", "UFFICIALE")
     oggi = datetime.now()
     anno_sel = st.number_input("Anno", 2024, 2030, oggi.year)
     mesi_ita = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", 
@@ -75,62 +76,82 @@ with st.sidebar:
 num_giorni = calendar.monthrange(anno_sel, mese_num)[1]
 
 if 'registro' not in st.session_state:
-    # Inizializziamo 31 giorni per sicurezza
     st.session_state.registro = {g: [False]*24 for g in range(1, 32)}
+if 'commenti' not in st.session_state:
+    st.session_state.commenti = {g: "" for g in range(1, 32)}
 
-# --- GRIGLIA PRINCIPALE ---
-# Definizione larghezze colonne: Giorno(1.2), 24 ore(1 ciascuna), Lavoro(1.5), Riposo(1.5)
-col_widths = [1.2] + [1]*24 + [1.5, 1.5]
+# --- HEADER TABELLA ---
+# Giorno(1) + 24 ore(0.8 cad) + Riposo(1.2) + Commenti(2) + Lav24(1.2) + Lav7g(1.2)
+col_widths = [1] + [0.8]*24 + [1.2, 2, 1.2, 1.2]
 cols_h = st.columns(col_widths)
 
-with cols_h[0]: st.markdown("<div class='header-box'>GIORNO</div>", unsafe_allow_html=True)
-for i in range(24):
-    with cols_h[i+1]: st.markdown(f"<div class='header-box'>{i:02d}</div>", unsafe_allow_html=True)
-with cols_h[25]: st.markdown("<div class='header-box'>LAVORO</div>", unsafe_allow_html=True)
-with cols_h[26]: st.markdown("<div class='header-box'>RIPOSO</div>", unsafe_allow_html=True)
+with cols_h[0]: st.markdown("<div class='header-box'>GG</div>", unsafe_allow_html=True)
+for i in range(1, 25):
+    with cols_h[i]: st.markdown(f"<div class='header-box'>{i:02d}</div>", unsafe_allow_html=True)
+with cols_h[25]: st.markdown("<div class='header-box'>Riposo<br>24h</div>", unsafe_allow_html=True)
+with cols_h[26]: st.markdown("<div class='header-box'>Commenti</div>", unsafe_allow_html=True)
+with cols_h[27]: st.markdown("<div class='header-box'>Lavoro<br>24h</div>", unsafe_allow_html=True)
+with cols_h[28]: st.markdown("<div class='header-box'>Lavoro<br>7gg</div>", unsafe_allow_html=True)
 
-total_lavoro_mese = 0
-total_riposo_mese = 0
-
+# --- CORPO TABELLA ---
 for giorno in range(1, num_giorni + 1):
     c = st.columns(col_widths)
     
-    # Colonna Data
-    c[0].markdown(f"<div class='calc-cell' style='font-size:12px;'>{giorno:02d}/{mese_num:02d}</div>", unsafe_allow_html=True)
+    # Giorno
+    c[0].markdown(f"<div class='calc-cell'>{giorno:02d}</div>", unsafe_allow_html=True)
     
-    # 24 Ore
-    for ora in range(24):
-        with c[ora+1]:
-            is_lavoro = st.session_state.registro[giorno][ora]
-            
-            # Etichetta dinamica: X grande e nera, R piccola e grigia
+    # 24 Ore (da 01 a 24)
+    for ora_index in range(24):
+        with c[ora_index + 1]:
+            is_lavoro = st.session_state.registro[giorno][ora_index]
             label = "X" if is_lavoro else "R"
             
-            # CSS inline specifico per il tasto "X" (sovrascrive il default)
-            btn_style = "font-weight: 900 !important; font-size: 22px !important; color: #000000 !important;" if is_lavoro else ""
-            
-            if st.button(label, key=f"b_{giorno}_{ora}"):
-                st.session_state.registro[giorno][ora] = not is_lavoro
-                st.rerun()
-    
-    # Calcoli riga
+            # Applichiamo stile nero/grassetto solo se è X
+            if is_lavoro:
+                # Usiamo markdown per iniettare il pulsante con stile specifico
+                if st.button(label, key=f"b_{giorno}_{ora_index}"):
+                    st.session_state.registro[giorno][ora_index] = not is_lavoro
+                    st.rerun()
+                st.markdown(f"<script>document.getElementById('b_{giorno}_{ora_index}').style.color='black';</script>", unsafe_allow_html=True)
+                # Nota: Streamlit non permette facilmente il cambio colore dinamico del testo del bottone via CSS standard per singola istanza
+                # Per garantire il nero/grassetto, usiamo un trucco di stile nell'etichetta se supportato o un widget diverso.
+            else:
+                if st.button(label, key=f"b_{giorno}_{ora_index}"):
+                    st.session_state.registro[giorno][ora_index] = not is_lavoro
+                    st.rerun()
+
+    # Calcoli
     ore_l = sum(st.session_state.registro[giorno])
     ore_r = 24 - ore_l
-    total_lavoro_mese += ore_l
-    total_riposo_mese += ore_r
+    
+    # Calcolo Lavoro 7 giorni (somma dei 6 giorni precedenti + corrente)
+    lav_7gg = 0
+    for g_prec in range(max(1, giorno-6), giorno + 1):
+        lav_7gg += sum(st.session_state.registro[g_prec])
 
-    # Colonne Totali Giornalieri
-    c[25].markdown(f"<div class='calc-cell' style='color:blue;'>{ore_l}</div>", unsafe_allow_html=True)
-    c[26].markdown(f"<div class='calc-cell' style='color:green;'>{ore_r}</div>", unsafe_allow_html=True)
+    # 1. Ore di riposo 24h
+    c[25].markdown(f"<div class='calc-cell'>{ore_r}</div>", unsafe_allow_html=True)
+    
+    # 2. Commenti
+    with c[26]:
+        st.session_state.commenti[giorno] = st.text_input("", value=st.session_state.commenti[giorno], key=f"com_{giorno}", label_visibility="collapsed")
+    
+    # 3. Ore di lavoro 24h
+    c[27].markdown(f"<div class='calc-cell'>{ore_l}</div>", unsafe_allow_html=True)
+    
+    # 4. Ore di lavoro 7gg
+    c[28].markdown(f"<div class='calc-cell'>{lav_7gg}</div>", unsafe_allow_html=True)
 
-# --- FOOTER TOTALI ---
-st.divider()
-f1, f2, f3 = st.columns([15, 3, 3])
-with f2: st.metric("TOT. LAVORO", f"{total_lavoro_mese}h")
-with f3: st.metric("TOT. RIPOSO", f"{total_riposo_mese}h")
-
-# --- AZIONI ---
-st.sidebar.divider()
-if st.sidebar.button("🧹 Svuota Registro"):
-    st.session_state.registro = {g: [False]*24 for g in range(1, 32)}
-    st.rerun()
+# CSS finale per forzare le X nere e grasse (Hack per bottoni Streamlit)
+st.markdown("""
+    <script>
+    const buttons = window.parent.document.querySelectorAll('button p');
+    buttons.forEach(p => {
+        if (p.innerText === 'X') {
+            p.style.color = 'black';
+            p.style.fontWeight = '900';
+            p.style.fontSize = '20px';
+        }
+    });
+    </script>
+    """, unsafe_allow_html=True)

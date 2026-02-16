@@ -6,54 +6,50 @@ from datetime import datetime
 # Configurazione Pagina
 st.set_page_config(page_title="Libro-rosso-TRIP", layout="wide")
 
-# --- CSS CUSTOM PER STILE REGISTRO ---
+# --- CSS CUSTOM PER STILE E VELOCITÀ ---
 st.markdown("""
     <style>
-    /* Rimpiccioliamo i bottoni e gestiamo il font */
+    /* Forza il colore nero e grassetto per le X tramite selettore di attributo */
+    button[kind="secondary"] p {
+        font-size: 18px !important;
+    }
+    
+    /* Rimpiccioliamo i bottoni per la griglia */
     div.stButton > button {
         width: 100% !important;
-        height: 40px !important;
+        height: 38px !important;
         padding: 0px !important;
         border: 1px solid #e0e0e0 !important;
         border-radius: 0px !important;
-        background-color: white !important;
-    }
-    
-    /* Stile per la R (Riposo) - Grigio tenue */
-    .stButton > button p {
-        color: #d3d3d3 !important;
-        font-weight: normal !important;
-        font-size: 14px !important;
     }
 
-    /* Override per la X (Lavoro) - Nero e Grassetto */
-    /* Usiamo un selettore basato sul testo del bottone se possibile o logica di stato */
-    
+    /* Header e Celle calcoli */
     .header-box {
-        background-color: #f8f9fa;
+        background-color: #f1f3f5;
         border: 1px solid #dee2e6;
-        padding: 5px;
         text-align: center;
         font-weight: bold;
         font-size: 10px;
-        height: 50px;
+        height: 45px;
         display: flex;
         align-items: center;
         justify-content: center;
     }
     .calc-cell {
-        height: 40px;
+        height: 38px;
         display: flex;
         align-items: center;
         justify-content: center;
         border: 1px solid #dee2e6;
         font-weight: bold;
         font-size: 13px;
+        background-color: #ffffff;
     }
-    /* Input commenti */
-    .stTextInput input {
-        border-radius: 0px !important;
-        height: 40px !important;
+    
+    /* Nasconde i margini eccessivi per compattare la tabella */
+    .block-container {
+        padding-top: 2rem !important;
+        padding-bottom: 0rem !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -65,6 +61,7 @@ with st.sidebar:
     st.header("⚙️ Parametri")
     nome = st.text_input("Nome/Cognome", "ROSSI MARIO")
     qualifica = st.text_input("Qualifica", "UFFICIALE")
+    
     oggi = datetime.now()
     anno_sel = st.number_input("Anno", 2024, 2030, oggi.year)
     mesi_ita = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", 
@@ -75,13 +72,13 @@ with st.sidebar:
 # --- LOGICA DATI ---
 num_giorni = calendar.monthrange(anno_sel, mese_num)[1]
 
+# Inizializzazione session_state per evitare reset al click
 if 'registro' not in st.session_state:
     st.session_state.registro = {g: [False]*24 for g in range(1, 32)}
 if 'commenti' not in st.session_state:
     st.session_state.commenti = {g: "" for g in range(1, 32)}
 
 # --- HEADER TABELLA ---
-# Giorno(1) + 24 ore(0.8 cad) + Riposo(1.2) + Commenti(2) + Lav24(1.2) + Lav7g(1.2)
 col_widths = [1] + [0.8]*24 + [1.2, 2, 1.2, 1.2]
 cols_h = st.columns(col_widths)
 
@@ -97,61 +94,51 @@ with cols_h[28]: st.markdown("<div class='header-box'>Lavoro<br>7gg</div>", unsa
 for giorno in range(1, num_giorni + 1):
     c = st.columns(col_widths)
     
-    # Giorno
+    # 1. Colonna Giorno
     c[0].markdown(f"<div class='calc-cell'>{giorno:02d}</div>", unsafe_allow_html=True)
     
-    # 24 Ore (da 01 a 24)
+    # 2. 24 Ore (Pulsanti)
     for ora_index in range(24):
         with c[ora_index + 1]:
             is_lavoro = st.session_state.registro[giorno][ora_index]
-            label = "X" if is_lavoro else "R"
+            # Formattazione orario per il tooltip (finestra che si apre)
+            fascia_oraria = f"Ore: {ora_index+1:02d}:00"
             
-            # Applichiamo stile nero/grassetto solo se è X
+            # Etichetta e stile
             if is_lavoro:
-                # Usiamo markdown per iniettare il pulsante con stile specifico
-                if st.button(label, key=f"b_{giorno}_{ora_index}"):
-                    st.session_state.registro[giorno][ora_index] = not is_lavoro
-                    st.rerun()
-                st.markdown(f"<script>document.getElementById('b_{giorno}_{ora_index}').style.color='black';</script>", unsafe_allow_html=True)
-                # Nota: Streamlit non permette facilmente il cambio colore dinamico del testo del bottone via CSS standard per singola istanza
-                # Per garantire il nero/grassetto, usiamo un trucco di stile nell'etichetta se supportato o un widget diverso.
+                label = "**X**" # Grassetto Markdown
+                btn_key = f"x_{giorno}_{ora_index}"
             else:
-                if st.button(label, key=f"b_{giorno}_{ora_index}"):
-                    st.session_state.registro[giorno][ora_index] = not is_lavoro
-                    st.rerun()
+                label = "R"
+                btn_key = f"r_{giorno}_{ora_index}"
+            
+            # Pulsante con 'help' per ripristinare il tooltip
+            if st.button(label, key=btn_key, help=fascia_oraria):
+                st.session_state.registro[giorno][ora_index] = not is_lavoro
+                st.rerun()
 
-    # Calcoli
+    # 3. Calcoli di riga
     ore_l = sum(st.session_state.registro[giorno])
     ore_r = 24 - ore_l
     
-    # Calcolo Lavoro 7 giorni (somma dei 6 giorni precedenti + corrente)
     lav_7gg = 0
     for g_prec in range(max(1, giorno-6), giorno + 1):
         lav_7gg += sum(st.session_state.registro[g_prec])
 
-    # 1. Ore di riposo 24h
+    # 4. Colonne Risultati
     c[25].markdown(f"<div class='calc-cell'>{ore_r}</div>", unsafe_allow_html=True)
-    
-    # 2. Commenti
     with c[26]:
-        st.session_state.commenti[giorno] = st.text_input("", value=st.session_state.commenti[giorno], key=f"com_{giorno}", label_visibility="collapsed")
-    
-    # 3. Ore di lavoro 24h
+        st.session_state.commenti[giorno] = st.text_input("", value=st.session_state.commenti[giorno], key=f"cmt_{giorno}", label_visibility="collapsed")
     c[27].markdown(f"<div class='calc-cell'>{ore_l}</div>", unsafe_allow_html=True)
-    
-    # 4. Ore di lavoro 7gg
     c[28].markdown(f"<div class='calc-cell'>{lav_7gg}</div>", unsafe_allow_html=True)
 
-# CSS finale per forzare le X nere e grasse (Hack per bottoni Streamlit)
+# --- CSS FINALE PER COLORE NERO ---
 st.markdown("""
-    <script>
-    const buttons = window.parent.document.querySelectorAll('button p');
-    buttons.forEach(p => {
-        if (p.innerText === 'X') {
-            p.style.color = 'black';
-            p.style.fontWeight = '900';
-            p.style.fontSize = '20px';
-        }
-    });
-    </script>
+    <style>
+    /* Seleziona i bottoni che contengono la X (tramite grassetto markdown) */
+    button:has(strong) p {
+        color: black !important;
+        font-weight: 900 !important;
+    }
+    </style>
     """, unsafe_allow_html=True)

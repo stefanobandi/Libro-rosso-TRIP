@@ -6,127 +6,131 @@ from datetime import datetime
 # Configurazione Pagina
 st.set_page_config(page_title="Libro-rosso-TRIP", layout="wide")
 
-# CSS per simulare il registro e gestire i colori delle righe
+# --- CSS CUSTOM PER REPLICARE IL REGISTRO ---
 st.markdown("""
     <style>
-    /* Rimpiccioliamo i bottoni per farli sembrare quadratini */
+    /* Rimpiccioliamo i bottoni e gestiamo il font */
     div.stButton > button {
-        width: 100%;
-        height: 30px;
-        padding: 0px;
-        border: 1px solid #ddd;
-        border-radius: 2px;
-        font-weight: bold;
+        width: 100% !important;
+        height: 45px !important;
+        padding: 0px !important;
+        border: 1px solid #e0e0e0 !important;
+        border-radius: 0px !important;
+        background-color: white !important;
+        transition: none !important;
     }
-    /* Stile per la "X" (Lavoro) */
-    .stButton > button:active, .stButton > button:focus, .stButton > button:hover {
-        border-color: #ff4b4b;
+    
+    /* Stile per la R (Riposo) */
+    .stButton > button p {
+        color: #d3d3d3 !important; /* Grigio tenue */
+        font-weight: normal !important;
+        font-size: 14px !important;
     }
-    /* Intestazioni tabella */
-    .header-text {
-        font-size: 12px;
-        font-weight: bold;
+
+    /* Stile per la X (Lavoro) - Quando cliccato lo stato cambia */
+    /* Nota: Usiamo una logica di colore basata sul contenuto del tasto */
+    
+    /* Intestazioni e celle calcoli */
+    .header-box {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        padding: 5px;
         text-align: center;
-    }
-    /* Colonna ore calcolate */
-    .calc-col {
-        background-color: #f0f2f6;
-        text-align: center;
         font-weight: bold;
-        border-radius: 5px;
-        padding: 5px 0px;
+        font-size: 11px;
+    }
+    .calc-cell {
+        height: 45px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #dee2e6;
+        font-weight: bold;
+        background-color: #ffffff;
+    }
+    .row-violation {
+        background-color: #ffebee; /* Sfondo rossastro per violazioni */
     }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🚢 Libro-rosso-TRIP")
-st.subheader("Registro Mensile delle Ore di Lavoro e Riposo")
+# --- INTESTAZIONE ---
+st.title("🚢 Registro Ore di Lavoro e Riposo")
+st.caption("Conforme ai requisiti D.Lgs 271/99 e 108/2005")
 
-# --- SIDEBAR: Dati Marittimo ---
+# --- SIDEBAR ---
 with st.sidebar:
-    st.header("Anagrafica & Periodo")
-    nome = st.text_input("Nome e Cognome Marittimo", "Mario Rossi")
-    qualifica = st.text_input("Qualifica", "Ufficiale di Coperta")
+    st.header("⚙️ Impostazioni")
+    nome = st.text_input("Nome/Cognome Marittimo", "ROSSI MARIO")
+    qualifica = st.text_input("Qualifica/Grado", "UFFICIALE")
     
     oggi = datetime.now()
-    anno_sel = st.selectbox("Anno", range(oggi.year - 1, oggi.year + 2), index=1)
+    anno_sel = st.number_input("Anno", 2024, 2030, oggi.year)
     mesi_ita = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", 
                 "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"]
-    mese_sel_nome = st.selectbox("Mese di Registro", mesi_ita, index=oggi.month - 1)
-    mese_num = mesi_ita.index(mese_sel_nome) + 1
+    mese_sel = st.selectbox("Mese", mesi_ita, index=oggi.month - 1)
+    mese_num = mesi_ita.index(mese_sel) + 1
 
 # --- LOGICA DATI ---
 num_giorni = calendar.monthrange(anno_sel, mese_num)[1]
 
-# Inizializzazione Stato del Registro (se non esiste)
-# Struttura: { 'giorno': [False, True, ...] } dove True = Lavoro (X)
 if 'registro' not in st.session_state:
+    # Inizializziamo 31 giorni per sicurezza
     st.session_state.registro = {g: [False]*24 for g in range(1, 32)}
 
-# --- HEADER TABELLA ---
-# Spazio per Giorno (1.5), 24 ore (1 ciascuna), Totali (1.5 + 1.5)
-col_widths = [1.5] + [1]*24 + [1.5, 1.5]
+# --- GRIGLIA PRINCIPALE ---
+# Definizione larghezze colonne: Giorno(1.2), 24 ore(1 ciascuna), Lavoro(1.5), Riposo(1.5)
+col_widths = [1.2] + [1]*24 + [1.5, 1.5]
 cols_h = st.columns(col_widths)
-cols_h[0].markdown("<div class='header-text'>GIORNO</div>", unsafe_allow_html=True)
+
+with cols_h[0]: st.markdown("<div class='header-box'>GIORNO</div>", unsafe_allow_html=True)
 for i in range(24):
-    cols_h[i+1].markdown(f"<div class='header-text'>{i:02d}</div>", unsafe_allow_html=True)
-cols_h[25].markdown("<div class='header-text'>LAVORO</div>", unsafe_allow_html=True)
-cols_h[26].markdown("<div class='header-text'>RIPOSO</div>", unsafe_allow_html=True)
+    with cols_h[i+1]: st.markdown(f"<div class='header-box'>{i:02d}</div>", unsafe_allow_html=True)
+with cols_h[25]: st.markdown("<div class='header-box'>LAVORO</div>", unsafe_allow_html=True)
+with cols_h[26]: st.markdown("<div class='header-box'>RIPOSO</div>", unsafe_allow_html=True)
 
-st.divider()
-
-# --- GRIGLIA GIORNALIERA ---
-totale_mese_lavoro = 0
-totale_mese_riposo = 0
+total_lavoro_mese = 0
+total_riposo_mese = 0
 
 for giorno in range(1, num_giorni + 1):
     c = st.columns(col_widths)
     
-    # 1. Colonna Giorno
-    c[0].write(f"**{giorno:02d}/{mese_num:02d}**")
+    # Colonna Data
+    c[0].markdown(f"<div class='calc-cell' style='font-size:12px;'>{giorno:02d}/{mese_num:02d}</div>", unsafe_allow_html=True)
     
-    # 2. 24 Ore (Quadratini)
+    # 24 Ore
     for ora in range(24):
         with c[ora+1]:
-            # Recuperiamo lo stato attuale
             is_lavoro = st.session_state.registro[giorno][ora]
-            label = "X" if is_lavoro else "R"
-            color = "#ff4b4b" if is_lavoro else "#d3d3d3"
             
-            # Pulsante che agisce come toggle
-            if st.button(label, key=f"btn_{giorno}_{ora}", help=f"Ora {ora:02d}"):
+            # Etichetta dinamica: X grande e nera, R piccola e grigia
+            label = "X" if is_lavoro else "R"
+            
+            # CSS inline specifico per il tasto "X" (sovrascrive il default)
+            btn_style = "font-weight: 900 !important; font-size: 22px !important; color: #000000 !important;" if is_lavoro else ""
+            
+            if st.button(label, key=f"b_{giorno}_{ora}"):
                 st.session_state.registro[giorno][ora] = not is_lavoro
                 st.rerun()
-
-    # 3. Calcoli di riga
-    ore_lavoro_giorno = sum(st.session_state.registro[giorno])
-    ore_riposo_giorno = 24 - ore_lavoro_giorno
     
-    totale_mese_lavoro += ore_lavoro_giorno
-    totale_mese_riposo += ore_riposo_giorno
-    
-    # Visualizzazione Totali Giornalieri
-    c[25].markdown(f"<div class='calc-col' style='color:blue'>{ore_lavoro_giorno}</div>", unsafe_allow_html=True)
-    c[26].markdown(f"<div class='calc-col'>{ore_riposo_giorno}</div>", unsafe_allow_html=True)
+    # Calcoli riga
+    ore_l = sum(st.session_state.registro[giorno])
+    ore_r = 24 - ore_l
+    total_lavoro_mese += ore_l
+    total_riposo_mese += ore_r
 
+    # Colonne Totali Giornalieri
+    c[25].markdown(f"<div class='calc-cell' style='color:blue;'>{ore_l}</div>", unsafe_allow_html=True)
+    c[26].markdown(f"<div class='calc-cell' style='color:green;'>{ore_r}</div>", unsafe_allow_html=True)
+
+# --- FOOTER TOTALI ---
 st.divider()
-
-# --- TOTALI MENSILI ---
-m1, m2, m3, m4 = st.columns([10, 3, 3, 3])
-with m2:
-    st.metric("Totale Lavoro Mese", f"{totale_mese_lavoro} h")
-with m3:
-    st.metric("Totale Riposo Mese", f"{totale_mese_riposo} h")
+f1, f2, f3 = st.columns([15, 3, 3])
+with f2: st.metric("TOT. LAVORO", f"{total_lavoro_mese}h")
+with f3: st.metric("TOT. RIPOSO", f"{total_riposo_mese}h")
 
 # --- AZIONI ---
 st.sidebar.divider()
-if st.sidebar.button("🗑️ Reset Mese"):
+if st.sidebar.button("🧹 Svuota Registro"):
     st.session_state.registro = {g: [False]*24 for g in range(1, 32)}
     st.rerun()
-
-st.sidebar.download_button(
-    label="📥 Scarica Registro (.csv)",
-    data=pd.DataFrame(st.session_state.registro).T.to_csv(),
-    file_name=f"Registro_{nome}_{mese_sel_nome}.csv",
-    mime="text/csv"
-)

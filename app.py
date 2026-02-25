@@ -27,22 +27,15 @@ def create_empty_df():
 
 def save_all_month(nome, qualifica, anno, mese, data_grid, commenti_grid):
     df = load_data()
-    # Rimuoviamo i dati vecchi di questo specifico marittimo/periodo per sovrascriverli
     df = df[~((df['Marittimo'] == nome) & (df['Anno'] == anno) & (df['Mese'] == mese))]
-    
     new_rows = []
     for gg, ore in data_grid.items():
-        row = {
-            "Marittimo": nome, "Qualifica": qualifica, "Anno": anno, "Mese": mese, "Giorno": gg,
-            "Commenti": commenti_grid.get(gg, "")
-        }
-        for i, v in enumerate(ore):
-            row[f"H{i+1:02d}"] = v
+        row = {"Marittimo": nome, "Qualifica": qualifica, "Anno": anno, "Mese": mese, "Giorno": gg, "Commenti": commenti_grid.get(gg, "")}
+        for i, v in enumerate(ore): row[f"H{i+1:02d}"] = v
         new_rows.append(row)
-    
     df = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True)
     df.to_csv(DB_FILE, index=False)
-    st.sidebar.success(f"✅ Registro di {mese} salvato!")
+    st.sidebar.success(f"✅ Salvato!")
 
 # --- CSS CUSTOM ---
 st.markdown("""
@@ -54,32 +47,68 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- SIDEBAR: Selezione e Salvataggio ---
-with st.sidebar:
-    st.header("📂 Gestione Registro")
-    nome_sel = st.text_input("Marittimo", "ROSSI MARIO").upper()
-    qual_sel = st.text_input("Qualifica", "UFFICIALE").upper()
-    
-    oggi = datetime.now()
-    mesi_ita = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", 
-                "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"]
-    mese_sel = st.selectbox("Mese", mesi_ita, index=oggi.month - 1)
-    anno_sel = st.selectbox("Anno", [2024, 2025, 2026], index=1)
-    
-    st.divider()
-    # Il bottone di salvataggio viene messo qui in fondo
-    save_btn = st.button("💾 SALVA TUTTO IL MESE", use_container_width=True)
+# --- SIDEBAR E GESTIONE MARITTIMI ---
+df_main = load_data()
 
-# --- LOGICA CARICAMENTO ---
-mese_num = mesi_ita.index(mese_sel) + 1
-num_giorni = calendar.monthrange(anno_sel, mese_num)[1]
-full_db = load_data()
-current_db = full_db[(full_db['Marittimo'] == nome_sel) & (full_db['Mese'] == mese_sel) & (full_db['Anno'] == anno_sel)]
+with st.sidebar:
+    st.header("🚢 Gestione Personale")
+    
+    # Lista marittimi unici (Nome + Qualifica)
+    if not df_main.empty:
+        marittimi_list = df_main[['Marittimo', 'Qualifica']].drop_duplicates()
+        opzioni_marittimi = (marittimi_list['Marittimo'] + " - " + marittimi_list['Qualifica']).tolist()
+    else:
+        opzioni_marittimi = []
+
+    selezione = st.selectbox("Selezione Marittimo", ["---"] + opzioni_marittimi)
+    
+    # Tasto per nuovo marittimo
+    with st.expander("➕ Crea Nuovo Marittimo"):
+        nuovo_nome = st.text_input("Nome e Cognome").upper()
+        nuova_qual = st.text_input("Qualifica").upper()
+        if st.button("Registra Marittimo"):
+            if nuovo_nome and nuova_qual:
+                # Inizializziamo una riga vuota per "creare" il marittimo nel DB
+                st.info(f"Marittimo {nuovo_nome} pronto. Selezionalo sopra.")
+                # Nota: non scriviamo ancora nel DB per non sporcare, lo faremo al primo salvataggio ore
+                selezione = f"{nuovo_nome} - {nuova_qual}"
+            else:
+                st.error("Inserisci tutti i dati")
+
+    st.divider()
+
+    # Logica Filtri Dinamici Mese/Anno
+    mesi_ita = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"]
+    
+    if selezione != "---":
+        nome_corrente = selezione.split(" - ")[0]
+        qual_corrente = selezione.split(" - ")[1]
+        
+        # Filtriamo il DB per vedere cosa ha già questo marittimo
+        dati_m = df_main[df_main['Marittimo'] == nome_corrente]
+        
+        anni_disponibili = sorted(dati_m['Anno'].unique().tolist()) if not dati_m.empty else [datetime.now().year]
+        if datetime.now().year not in anni_disponibili: anni_disponibili.append(datetime.now().year)
+        
+        anno_sel = st.selectbox("Anno", anni_disponibili)
+        
+        mesi_disponibili = dati_m[dati_m['Anno'] == anno_sel]['Mese'].unique().tolist() if not dati_m.empty else []
+        # Aggiungiamo sempre la possibilità di scegliere un mese nuovo
+        mese_sel = st.selectbox("Mese", mesi_ita, index=datetime.now().month-1)
+        
+        st.divider()
+        save_btn = st.button("💾 SALVA TUTTO IL MESE", use_container_width=True)
+    else:
+        st.warning("Seleziona o crea un marittimo per iniziare.")
+        st.stop()
 
 # --- GRIGLIA DATI ---
-st.markdown(f"### Registro: {nome_sel} - {mese_sel} {anno_sel}")
+st.markdown(f"### Registro: {selezione}")
 
-# Strutture temporanee per raccogliere i dati della griglia
+mese_num = mesi_ita.index(mese_sel) + 1
+num_giorni = calendar.monthrange(anno_sel, mese_num)[1]
+current_db = df_main[(df_main['Marittimo'] == nome_corrente) & (df_main['Mese'] == mese_sel) & (df_main['Anno'] == anno_sel)]
+
 temp_registro = {}
 temp_commenti = {}
 
@@ -97,34 +126,26 @@ for gg in range(1, num_giorni + 1):
     r_cols = st.columns(col_widths)
     row_db = current_db[current_db['Giorno'] == gg]
     
-    # Giorno
     r_cols[0].markdown(f"<div class='data-cell'><b>{gg:02d}</b></div>", unsafe_allow_html=True)
     
-    # Ore
     ore_giorno = []
     for ora in range(1, 25):
         with r_cols[ora]:
-            # Valore di default dal DB
             def_val = bool(row_db[f"H{ora:02d}"].values[0]) if not row_db.empty else False
             val = st.checkbox("", value=def_val, key=f"ch_{gg}_{ora}", label_visibility="collapsed")
             ore_giorno.append(val)
     
     temp_registro[gg] = ore_giorno
-    
-    # Calcoli riga
     lav = sum(ore_giorno)
     rip = 24 - lav
     
-    # Commenti
     with r_cols[26]:
         def_comm = str(row_db['Commenti'].values[0]) if not row_db.empty and str(row_db['Commenti'].values[0]) != "nan" else ""
         comm = st.text_input("", value=def_comm, key=f"c_{gg}", label_visibility="collapsed")
         temp_commenti[gg] = comm
     
-    # Totali riga
     r_cols[25].markdown(f"<div class='data-cell'>{rip}</div>", unsafe_allow_html=True)
     r_cols[27].markdown(f"<div class='data-cell'>{lav}</div>", unsafe_allow_html=True)
 
-# --- AZIONE DI SALVATAGGIO ---
 if save_btn:
-    save_all_month(nome_sel, qual_sel, anno_sel, mese_sel, temp_registro, temp_commenti)
+    save_all_month(nome_corrente, qual_corrente, anno_sel, mese_sel, temp_registro, temp_commenti)

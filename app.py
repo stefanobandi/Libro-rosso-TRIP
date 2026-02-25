@@ -1,144 +1,122 @@
 import streamlit as st
 import pandas as pd
 import calendar
+import os
 from datetime import datetime
 
 # Configurazione Pagina
 st.set_page_config(page_title="Libro-rosso-TRIP", layout="wide")
 
-# --- CSS CUSTOM PER GRIGLIA PULITA E VELOCE ---
+DB_FILE = "database.csv"
+
+# --- FUNZIONI DATABASE ---
+def load_data():
+    if os.path.exists(DB_FILE):
+        return pd.read_csv(DB_FILE)
+    else:
+        # Crea dataframe vuoto se il file non esiste
+        cols = ["Marittimo", "Qualifica", "Anno", "Mese", "Giorno"] + [f"H{i:02d}" for i in range(1, 25)] + ["Commenti"]
+        return pd.DataFrame(columns=cols)
+
+def save_row(row_data):
+    df = load_data()
+    # Rimuove la riga vecchia se esiste (stesso marittimo, anno, mese, giorno)
+    df = df[~((df['Marittimo'] == row_data['Marittimo']) & 
+              (df['Anno'] == row_data['Anno']) & 
+              (df['Mese'] == row_data['Mese']) & 
+              (df['Giorno'] == row_data['Giorno']))]
+    # Aggiunge la nuova riga
+    df = pd.concat([df, pd.DataFrame([row_data])], ignore_index=True)
+    df.to_csv(DB_FILE, index=False)
+
+# --- INTERFACCIA ---
 st.markdown("""
     <style>
-    .block-container { padding-top: 1rem !important; padding-bottom: 0rem !important; }
-    
-    .official-header {
-        border-bottom: 2px solid black;
-        margin-bottom: 20px;
-        padding-bottom: 10px;
-    }
-
-    /* Stile per le Checkbox nella griglia */
-    [data-testid="stCheckbox"] {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 35px;
-        margin: 0;
-        padding: 0;
-    }
-
-    /* Header Tabella */
-    .header-box {
-        background-color: #f2f2f2;
-        border: 1px solid #999999;
-        text-align: center;
-        font-weight: bold;
-        font-size: 11px;
-        height: 45px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    /* Celle Dati/Calcoli */
-    .data-cell {
-        height: 35px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border: 1px solid #cccccc;
-        font-size: 13px;
-        background-color: white;
-    }
-    
-    /* Input Commenti */
-    .stTextInput input {
-        border-radius: 0px !important;
-        border: 1px solid #cccccc !important;
-        height: 35px !important;
-    }
+    .block-container { padding-top: 1rem !important; }
+    .header-box { background-color: #f2f2f2; border: 1px solid #999; text-align: center; font-weight: bold; font-size: 11px; height: 40px; display: flex; align-items: center; justify-content: center; }
+    .data-cell { height: 35px; display: flex; align-items: center; justify-content: center; border: 1px solid #ccc; font-size: 13px; }
+    [data-testid="stCheckbox"] { display: flex; justify-content: center; align-items: center; height: 35px; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- INTESTAZIONE SUPERIORE ---
-with st.container():
-    col_tit1, col_tit2 = st.columns([1, 4])
-    with col_tit1:
-        st.write("🚢 **Libro-rosso-TRIP**")
-    with col_tit2:
-        st.markdown("<div class='official-header'><h3>Registrazione delle Ore di Lavoro e di Riposo dei Marittimi</h3>"
-                    "<p>Conforme al D.Lgs. 271/99 e D.Lgs. 108/2005</p></div>", unsafe_allow_html=True)
+st.title("🚢 Libro-rosso-TRIP")
 
-# --- BARRA DATI ---
-d1, d2, d3, d4 = st.columns(4)
-with d1: nome = st.text_input("Nome/Cognome", "ROSSI MARIO")
-with d2: qualifica = st.text_input("Qualifica/Grado", "UFFICIALE")
-with d3: 
+# --- SIDEBAR: Filtri di Caricamento ---
+with st.sidebar:
+    st.header("📂 Caricamento Dati")
+    nome_sel = st.text_input("Marittimo", "ROSSI MARIO").upper()
+    qual_sel = st.text_input("Qualifica", "UFFICIALE").upper()
+    
     oggi = datetime.now()
     mesi_ita = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", 
                 "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"]
-    mese_sel = st.selectbox("Mese di riferimento", mesi_ita, index=oggi.month - 1)
-with d4: anno_sel = st.selectbox("Anno", [2024, 2025, 2026], index=1)
+    mese_sel = st.selectbox("Mese", mesi_ita, index=oggi.month - 1)
+    anno_sel = st.selectbox("Anno", [2024, 2025, 2026], index=1)
 
-mese_num = mesi_ita.index(mese_sel) + 1
-num_giorni = calendar.monthrange(anno_sel, mese_num)[1]
-
-# --- INIZIALIZZAZIONE / CARICAMENTO DATI ---
-# In questa fase usiamo session_state. In futuro qui caricheremo dal file esterno.
-if 'registro' not in st.session_state:
-    st.session_state.registro = {g: [False]*24 for g in range(1, 32)}
-if 'commenti' not in st.session_state:
-    st.session_state.commenti = {g: "" for g in range(1, 32)}
-
-# --- GRIGLIA REGISTRO ---
-col_widths = [1] + [0.7]*24 + [1.2, 2.5, 1.2, 1.2]
-h_cols = st.columns(col_widths)
-
-with h_cols[0]: st.markdown("<div class='header-box'>GG</div>", unsafe_allow_html=True)
-for i in range(1, 25):
-    with h_cols[i]: st.markdown(f"<div class='header-box'>{i:02d}</div>", unsafe_allow_html=True)
-with h_cols[25]: st.markdown("<div class='header-box'>Riposo<br>24h</div>", unsafe_allow_html=True)
-with h_cols[26]: st.markdown("<div class='header-box'>Commenti</div>", unsafe_allow_html=True)
-with h_cols[27]: st.markdown("<div class='header-box'>Lavoro<br>24h</div>", unsafe_allow_html=True)
-with h_cols[28]: st.markdown("<div class='header-box'>Lavoro<br>7gg</div>", unsafe_allow_html=True)
-
-# Loop Giorni
-for gg in range(1, num_giorni + 1):
-    r_cols = st.columns(col_widths)
+# --- LOGICA DI FRAMMENTO (ANTI-LAG) ---
+@st.fragment
+def render_registro(nome, qualifica, mese, anno):
+    mese_num = mesi_ita.index(mese) + 1
+    num_giorni = calendar.monthrange(anno, mese_num)[1]
     
-    # 1. Colonna Giorno
-    r_cols[0].markdown(f"<div class='data-cell'><b>{gg:02d}</b></div>", unsafe_allow_html=True)
-    
-    # 2. 24 Ore (Checkbox invece di Button per velocità)
-    for ora in range(24):
-        with r_cols[ora + 1]:
-            # La checkbox aggiorna direttamente lo stato senza ricaricare tutto forzatamente
-            st.session_state.registro[gg][ora] = st.checkbox(
-                "", 
-                value=st.session_state.registro[gg][ora], 
-                key=f"ch_{gg}_{ora}", 
-                label_visibility="collapsed"
-            )
+    # Carica dati esistenti dal DB
+    full_db = load_data()
+    current_data = full_db[(full_db['Marittimo'] == nome) & (full_db['Mese'] == mese) & (full_db['Anno'] == anno)]
 
-    # 3. Calcoli
-    ore_l = sum(st.session_state.registro[gg])
-    ore_r = 24 - ore_l
-    
-    lav_7gg = 0
-    for p in range(max(1, gg-6), gg + 1):
-        lav_7gg += sum(st.session_state.registro[p])
+    # Header Tabella
+    col_widths = [1] + [0.6]*24 + [1.2, 2.5, 1.2]
+    h_cols = st.columns(col_widths)
+    h_cols[0].markdown("<div class='header-box'>GG</div>", unsafe_allow_html=True)
+    for i in range(1, 25): h_cols[i].markdown(f"<div class='header-box'>{i:02d}</div>", unsafe_allow_html=True)
+    h_cols[25].markdown("<div class='header-box'>Riposo</div>", unsafe_allow_html=True)
+    h_cols[26].markdown("<div class='header-box'>Commenti</div>", unsafe_allow_html=True)
+    h_cols[27].markdown("<div class='header-box'>Lav.24h</div>", unsafe_allow_html=True)
 
-    # 4. Colonne Risultati
-    r_cols[25].markdown(f"<div class='data-cell'>{ore_r}</div>", unsafe_allow_html=True)
-    with r_cols[26]:
-        st.session_state.commenti[gg] = st.text_input("", value=st.session_state.commenti[gg], key=f"c_{gg}", label_visibility="collapsed")
-    r_cols[27].markdown(f"<div class='data-cell'>{ore_l}</div>", unsafe_allow_html=True)
-    r_cols[28].markdown(f"<div class='data-cell' style='background-color:#f9f9f9'>{lav_7gg}</div>", unsafe_allow_html=True)
+    # Griglia Giorni
+    for gg in range(1, num_giorni + 1):
+        r_cols = st.columns(col_widths)
+        
+        # Recupera stato riga se esiste nel DB
+        row_db = current_data[current_data['Giorno'] == gg]
+        
+        # Giorno
+        r_cols[0].markdown(f"<div class='data-cell'><b>{gg:02d}</b></div>", unsafe_allow_html=True)
+        
+        # 24 Ore (Checkbox)
+        lavoro_ore = []
+        for ora in range(1, 25):
+            with r_cols[ora]:
+                key = f"h_{nome}_{anno}_{mese}_{gg}_{ora}"
+                default_val = bool(row_db[f"H{ora:02d}"].values[0]) if not row_db.empty else False
+                val = st.checkbox("", value=default_val, key=key, label_visibility="collapsed")
+                lavoro_ore.append(val)
+        
+        # Calcoli veloci di riga
+        ore_l = sum(lavoro_ore)
+        ore_r = 24 - ore_l
+        
+        # Commenti e Salvataggio automatico riga
+        with r_cols[26]:
+            def_comm = str(row_db['Commenti'].values[0]) if not row_db.empty and str(row_db['Commenti'].values[0]) != "nan" else ""
+            comm = st.text_input("", value=def_comm, key=f"c_{gg}", label_visibility="collapsed")
+        
+        # Visualizzazione Totali
+        r_cols[25].markdown(f"<div class='data-cell'>{ore_r}</div>", unsafe_allow_html=True)
+        r_cols[27].markdown(f"<div class='data-cell'>{ore_l}</div>", unsafe_allow_html=True)
 
-# --- FOOTER ---
+        # Se i dati sono cambiati rispetto al DB, salviamo la riga
+        # (Nota: Per semplicità salviamo al click del commento o interazione riga)
+        if st.button("💾", key=f"save_{gg}", help="Salva riga"):
+            new_row = {
+                "Marittimo": nome, "Qualifica": qualifica, "Anno": anno, "Mese": mese, "Giorno": gg,
+                "Commenti": comm
+            }
+            for i, v in enumerate(lavoro_ore): new_row[f"H{i+1:02d}"] = v
+            save_row(new_row)
+            st.toast(f"Giorno {gg} salvato!")
+
+# Esecuzione del frammento
+render_registro(nome_sel, qual_sel, mese_sel, anno_sel)
+
 st.divider()
-col_f1, col_f2 = st.columns([8, 2])
-with col_f2:
-    if st.button("💾 Salva Sessione"):
-        # Placeholder per la funzione di salvataggio file esterno
-        st.success("Dati pronti per il salvataggio!")
+st.info("I dati vengono isolati per marittimo e periodo. Clicca sul dischetto 💾 a fine riga per confermare il salvataggio nel database.")
